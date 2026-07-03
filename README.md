@@ -1,182 +1,212 @@
-# SwinMamba-ResNet34-CIM-SwinDecoder
 
-Dual-branch medical image segmentation combining CNN local details with Mamba global context.
+# SwinMamba + ResNet34 + CIM + SwinDecoder
 
-## Architecture
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**双分支医学图像分割模型** — 融合 CNN 局部细节 与 Mamba (SS2D) 全局上下文，面向乳腺超声（BreastUS）和细胞核（MoNuSeg）分割任务。
+
+---
+
+## 📸 模型结构图
+
+![Model Structure](model_structure.png)
+
+> 完整架构解析请参阅 [architecture_analysis.md](architecture_analysis.md)
+
+---
+
+## 🧠 架构概览
 
 ```
-Input (224×224×3)
+输入图像 (3×224×224)
     │
-    ├── CIM (Contrast Improvement Module) ── optional input enhancement
-    │
-    ├── CNN Branch: ResNet34 (ImageNet pretrained) ── local texture/detail
-    │
-    ├── Mamba Branch: VMamba-Tiny Encoder ── SS2D 4-directional selective scan, global context
-    │
-    ├── TMCA (Channel Exchange Attention) ── cross-branch feature interaction at 4 scales
-    │
-    ├── SpatialAttentionFusion ── learnable spatial gating + residual fusion
-    │
-    └── SwinUMambaDecoder ── UNet-style with raw input skip + deep supervision
-            │
-            └── Output (224×224×1) binary mask
+    ├── CIM 对比度增强 ────────────────────────┐
+    │                                          │
+    ├── ResNet34 Encoder (CNN)                 │
+    │   ├─ Stage1: 64ch @56                    │
+    │   ├─ Stage2: 128ch @28                   │
+    │   ├─ Stage3: 256ch @14                   │
+    │   └─ Stage4: 512ch @7                    │
+    │                                          │
+    ├── VMamba-Tiny Encoder (Mamba/SS2D)       │
+    │   ├─ Stem (Conv7×7 s=2) → 48ch           │
+    │   ├─ Stage1: 96ch @56                    │
+    │   ├─ Stage2: 192ch @28                   │
+    │   ├─ Stage3: 384ch @14                   │
+    │   └─ Stage4: 768ch @7                    │
+    │                                          │
+    ├── Conv1×1 通道投影 ──────────────────────│
+    │                                          │
+    ├── TMCA 通道交互注意力 (4 Stages) ─────────│
+    │   └── SpatialAttentionFusion 空间融合 ───│
+    │                                          │
+    └── SwinUMambaDecoder ────────── raw skip ◄┘
+        ├─ UpBlock ×5（转置卷积上采样）
+        ├─ BasicResBlock 跳跃连接
+        └─ Conv1×1 → 输出掩膜 (1×224×224)
 ```
 
-### Key Components
+### 核心创新点
 
-| Module | Description |
-|--------|-------------|
-| **ResNet34 Encoder** | CNN branch for fine local textures, ImageNet pretrained |
-| **VMamba-Tiny Encoder** | SS2D-based Mamba backbone with 4-directional scanning for global context |
-| **CIM** | Contrast Improvement Module — enhances input detail before encoding |
-| **TMCA** | Channel exchange attention — fuses CNN and Mamba features via cross-channel SE |
-| **SpatialAttentionFusion** | Dynamic spatial gating with residual connections for multi-scale fusion |
-| **SwinUMambaDecoder** | Upsampling decoder with raw image skip, InstanceNorm, deep supervision |
-| **Bias-Prior Init** | Initializes output bias from foreground pixel ratio for faster convergence |
-| **Focal Tversky Loss** | Handles class imbalance with tunable FP/FN penalty (α=0.6, β=0.4, γ=2.5) |
+| 模块 | 创新 |
+|------|------|
+| **CIM** | 可学习对比度增强，平滑层+细节层分解，α 自适应缩放 |
+| **SS2D** | 四方向选择性扫描，O(N) 线性复杂度，纯PyTorch跨平台回退 |
+| **TMCA** | CNN↔Mamba 双向通道交互注意力，SEBlock 筛选后交叉查询 |
+| **SpatialAttentionFusion** | 空间自适应权重 + 残差连接 + 互补权重 (weight vs 1-weight) |
+| **SwinUMambaDecoder** | Raw Image Skip + 多级跳跃连接 + Deep Supervision |
 
-## Supported Datasets
+---
 
-| Dataset | Task | #Classes |
-|---------|------|----------|
-| **MoNuSeg** | Nuclei segmentation | 1 (binary) |
-| **BreastUS (BUSI)** | Breast ultrasound tumor segmentation | 1 (binary) |
-| **Synapse** | Multi-organ CT segmentation | 9 |
+## 📁 项目结构
 
-## Installation
+```
+Swinmamba_resnet34_CIM_swindecoder/
+├── models/
+│   ├── model.py              # 主模型 (CIM, TMCA, XFF, ResNet34, Decoder)
+│   └── swin_umamba.py        # VMamba-Tiny 编码器 + SS2D 算子
+├── datasets/
+│   ├── dataset_synapse.py    # 数据集加载 & 增强 pipeline
+│   └── preprocessed_monuseg.py
+├── train.py                  # 训练入口 & 参数配置
+├── trainer.py                # 训练循环、验证、WarmupPolyLR、早停
+├── test.py                   # 测试/推理脚本 (支持滑窗 & 直接resize)
+├── utils.py                  # 损失函数 (Focal Tversky / Dice+Focal) & 评估指标
+├── architecture_analysis.md  # 详细架构解析文档
+├── model_structure.png       # 模型结构图
+└── train_test.md             # 训练启动指南
+```
+
+---
+
+## 🚀 快速开始
+
+### 环境要求
+
+- Python 3.8+
+- PyTorch 2.0+
+- CUDA 11.8+ (推荐，非必须)
 
 ```bash
-# PyTorch (CUDA 11.8+)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-# Dependencies
-pip install numpy scipy medpy SimpleITK tensorboardX tqdm einops timm h5py opencv-python scikit-image Pillow
-
-# Optional: mamba-ssm for CUDA-accelerated selective scan (Linux only)
-pip install mamba-ssm
-# On Windows, a pure-PyTorch fallback is used automatically
+pip install torch torchvision
+pip install numpy scipy medpy SimpleITK tensorboardX tqdm
+pip install timm einops
+pip install h5py Pillow opencv-python scikit-image
 ```
 
-## Quick Start
+### 训练
 
 ```bash
-# Test on CPU (pure PyTorch fallback, no GPU required)
-python test.py --dataset MoNuSeg --split test --model <path_to_checkpoint> --test-mode sliding_window --deep-supervision 1
+# 默认配置训练 (BreastUS)
+python train.py
 
-# Train on MoNuSeg with default settings
-python train.py --dataset MoNuSeg --batch_size 16 --max_epochs 130 --load_pretrained True
-```
+# MoNuSeg 细胞核分割
+python train.py --dataset MoNuSeg --batch_size 16 --max_epochs 130
 
-## Training
-
-```bash
-# Standard training (recommended)
+# 完整训练配置
 python train.py \
     --dataset MoNuSeg \
     --batch_size 16 \
     --max_epochs 130 \
     --base_lr 0.0003 \
     --load_pretrained True \
-    --seed 42
-
-# With deep supervision + focal tversky loss
-python train.py \
-    --dataset MoNuSeg \
-    --batch_size 16 \
-    --max_epochs 150 \
-    --base_lr 3e-4 \
-    --load_pretrained True \
     --use_cim 1 \
-    --cim_scaling_factor 0.5 \
     --loss_type focal_tversky \
     --deep_supervision 1 \
     --early_stopping_patience 50
-
-# Breast ultrasound
-python train.py --dataset BreastUS --batch_size 8 --max_epochs 150 --load_pretrained True
 ```
 
-### Key Hyperparameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--dataset` | `BreastUS` | `MoNuSeg`, `BreastUS`, `Synapse` |
-| `--batch_size` | `16` | Batch size per GPU |
-| `--max_epochs` | `130` | Total training epochs |
-| `--base_lr` | `0.0003` | Initial learning rate (AdamW) |
-| `--img_size` | `224` | Input resolution |
-| `--use_cim` | `1` | Enable contrast improvement |
-| `--load_pretrained` | `False` | Load VMamba-Tiny ImageNet weights |
-| `--loss_type` | `focal_tversky` | `dice_focal` or `focal_tversky` |
-| `--deep_supervision` | `0` | Enable multi-scale auxiliary loss |
-| `--early_stopping_patience` | `0` | Patience epochs (0=disabled) |
-| `--foreground_prior` | `0.0` | Bias-prior init (0=auto-compute) |
-| `--freeze_mamba_encoder` | `0` | Freeze VMamba after loading pretrained weights |
-
-### Pretrained Weights
-
-Download VMamba-Tiny ImageNet pretrained weights:
+### 测试
 
 ```bash
-# Auto-download (in code)
-# Or manually from:
-# https://github.com/MzeroMiko/VMamba/releases/tag/20240218
-# File: vssmtiny_dp01_ckpt_epoch_292.pth
-# Place at: ./data/pretrained/vmamba/vmamba_tiny_e292.pth
-```
-
-## Testing
-
-```bash
+# 滑窗推理 (推荐)
 python test.py \
     --dataset MoNuSeg \
     --split test \
-    --model ./output/TU_MoNuSeg224/TU_pretrain_VMambaTiny_.../best_model.pth \
+    --model ./output/xxx/best_model.pth \
     --test-mode sliding_window \
     --deep-supervision 1
+
+# 直接 resize 推理
+python test.py \
+    --dataset BreastUS \
+    --split test \
+    --model ./output/xxx/best_model.pth \
+    --test-mode direct_resize
 ```
 
-## Output Structure
+---
 
-```
-output/
-└── TU_MoNuSeg224_pretrain_VMambaTiny_skip3_epo130_bs16_lr0.0003_224_s42_20260509_045946/
-    ├── best_model.pth          # Best checkpoint (by validation Dice)
-    ├── epoch_50.pth
-    ├── epoch_100.pth
-    ├── log.txt                 # Training log
-    └── log/                    # TensorBoard events
-```
+## ⚙️ 关键参数
 
-## Evaluation Metrics
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--dataset` | `BreastUS` | 数据集: `BreastUS`, `MoNuSeg`, `Synapse` |
+| `--img_size` | `224` | 输入图像尺寸 |
+| `--batch_size` | `16` | 批大小 |
+| `--max_epochs` | `130` | 最大训练轮数 |
+| `--base_lr` | `0.0003` | 初始学习率 |
+| `--use_cim` | `1` | 启用对比度增强 |
+| `--loss_type` | `focal_tversky` | 损失函数: `focal_tversky` / `dice_focal` |
+| `--deep_supervision` | `0` | 启用深层监督 |
+| `--load_pretrained` | `False` | 加载预训练权重 |
+| `--freeze_mamba_encoder` | `0` | 冻结 Mamba 编码器 |
+| `--early_stopping_patience` | `0` | 早停 patience (0=禁用) |
 
-Dice, HD95, ASD (Average Surface Distance), IoU, Recall, Precision — all computed via `calculate_metric_percase()` in [utils.py](utils.py).
+---
 
-## Project Structure
+## 📊 评估指标 (MICCAI 标准)
 
-```
-├── train.py                  # Training entry point + argparse
-├── trainer.py                # Training loop, WarmupPolyLR, EarlyStopping, validation
-├── test.py                   # Test/inference script
-├── utils.py                  # Loss functions, metrics (Dice, HD95, IoU)
-├── models/
-│   ├── model.py              # Dual-branch model: ResNet34 + VMamba-Tiny + TMCA + CIM + Decoder
-│   └── swin_umamba.py        # SS2D, VSSBlock, VSSMEncoder, BasicResBlock, UpBlock, SwinUMamba
-├── datasets/
-│   ├── dataset_synapse.py    # Data loading, augmentations (BreastUS, Synapse, MoNuSeg)
-│   └── preprocessed_monuseg.py  # Preprocessed MoNuSeg patch dataset
-└── data/
-    └── pretrained/
-        └── vmamba/           # Place VMamba-Tiny checkpoint here
-```
+| 指标 | 说明 |
+|------|------|
+| **Dice** | Sørensen-Dice 重叠系数 ↑ |
+| **HD95** | 95% Hausdorff 距离（边界误差）↓ |
+| **ASD** | 平均表面距离 ↓ |
+| **IoU** | 交并比 (Jaccard) ↑ |
+| **Recall** | 敏感性 TP/(TP+FN) ↑ |
+| **Precision** | 精确度 TP/(TP+FP) ↑ |
 
-## Platform Support
+---
 
-- **Linux** — full support with CUDA-accelerated `mamba-ssm` selective scan
-- **Windows** — supported via pure-PyTorch selective scan fallback (no `mamba-ssm` needed)
+## 🔬 训练策略
 
-## References
+- **优化器**: AdamW (lr=3e-4, weight_decay=3e-5)
+- **学习率调度**: WarmupPolyLR (10 epoch warm-up, power=0.9 poly decay)
+- **损失函数**: Focal Tversky Loss (α=0.6, β=0.4, γ=2.5)
+- **Bias-prior 初始化**: 根据训练集前景占比自动计算
+- **早停**: 监控验证集 Dice，恢复最佳模型权重
+- **数据增强**: 随机旋转±15°、翻转、亮度/对比度/模糊、CoarseDropout、弹性变形、染色增强
 
-- Swin-UMamba: [arXiv:2402.03302](https://arxiv.org/abs/2402.03302)
-- VMamba: [https://github.com/MzeroMiko/VMamba](https://github.com/MzeroMiko/VMamba)
-- Focal Tversky Loss: Abraham & Khan, ISBI 2019
+---
+
+## 📈 模型参数量
+
+| 模块 | 参数量 | 状态 |
+|------|--------|------|
+| CIM | ~18 | 可训练 |
+| ResNet34 Encoder | ~21.3M | 可训练 |
+| VMamba-Tiny Encoder | ~13.4M | 默认冻结 |
+| 通道投影层 | ~0.55M | 可训练 |
+| TMCA ×4 | ~1.1M | 可训练 |
+| SpatialAttentionFusion ×4 | ~1.6M | 可训练 |
+| SwinUMambaDecoder | ~4.0M | 可训练 |
+| **总计** | **~41.8M** | 可训练 ~28.4M |
+
+---
+
+## 📚 引用
+
+本项目融合了以下工作的方法：
+
+- **ResNet**: He et al., "Deep Residual Learning for Image Recognition", CVPR 2016
+- **VMamba / SS2D**: Liu et al., "VMamba: Visual State Space Model", 2024
+- **Swin-UMamba**: Liu et al., "Swin-UMamba: Mamba-based UNet with ImageNet-based pretraining", 2024
+- **Focal Tversky Loss**: Abraham & Khan, "A Novel Focal Tversky Loss for Unbalanced Biomedical Image Segmentation", ISBI 2019
+
+---
+
+## 📄 License
+
+MIT License
