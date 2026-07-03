@@ -1,9 +1,7 @@
-
 # SwinMamba + ResNet34 + CIM + SwinDecoder
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **双分支医学图像分割模型** — 融合 CNN 局部细节 与 Mamba (SS2D) 全局上下文，面向乳腺超声（BreastUS）和细胞核（MoNuSeg）分割任务。
 
@@ -50,13 +48,13 @@
 
 ### 核心创新点
 
-| 模块 | 创新 |
-|------|------|
-| **CIM** | 可学习对比度增强，平滑层+细节层分解，α 自适应缩放 |
-| **SS2D** | 四方向选择性扫描，O(N) 线性复杂度，纯PyTorch跨平台回退 |
-| **TMCA** | CNN↔Mamba 双向通道交互注意力，SEBlock 筛选后交叉查询 |
+| 模块                             | 创新                                                      |
+| -------------------------------- | --------------------------------------------------------- |
+| **CIM**                    | 可学习对比度增强，平滑层+细节层分解，α 自适应缩放        |
+| **SS2D**                   | 四方向选择性扫描，O(N) 线性复杂度，纯PyTorch跨平台回退    |
+| **TMCA**                   | CNN↔Mamba 双向通道交互注意力，SEBlock 筛选后交叉查询     |
 | **SpatialAttentionFusion** | 空间自适应权重 + 残差连接 + 互补权重 (weight vs 1-weight) |
-| **SwinUMambaDecoder** | Raw Image Skip + 多级跳跃连接 + Deep Supervision |
+| **SwinUMambaDecoder**      | Raw Image Skip + 多级跳跃连接 + Deep Supervision          |
 
 ---
 
@@ -141,32 +139,32 @@ python test.py \
 
 ## ⚙️ 关键参数
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--dataset` | `BreastUS` | 数据集: `BreastUS`, `MoNuSeg`, `Synapse` |
-| `--img_size` | `224` | 输入图像尺寸 |
-| `--batch_size` | `16` | 批大小 |
-| `--max_epochs` | `130` | 最大训练轮数 |
-| `--base_lr` | `0.0003` | 初始学习率 |
-| `--use_cim` | `1` | 启用对比度增强 |
-| `--loss_type` | `focal_tversky` | 损失函数: `focal_tversky` / `dice_focal` |
-| `--deep_supervision` | `0` | 启用深层监督 |
-| `--load_pretrained` | `False` | 加载预训练权重 |
-| `--freeze_mamba_encoder` | `0` | 冻结 Mamba 编码器 |
-| `--early_stopping_patience` | `0` | 早停 patience (0=禁用) |
+| 参数                          | 默认值            | 说明                                          |
+| ----------------------------- | ----------------- | --------------------------------------------- |
+| `--dataset`                 | `BreastUS`      | 数据集:`BreastUS`, `MoNuSeg`, `Synapse` |
+| `--img_size`                | `224`           | 输入图像尺寸                                  |
+| `--batch_size`              | `16`            | 批大小                                        |
+| `--max_epochs`              | `130`           | 最大训练轮数                                  |
+| `--base_lr`                 | `0.0003`        | 初始学习率                                    |
+| `--use_cim`                 | `1`             | 启用对比度增强                                |
+| `--loss_type`               | `focal_tversky` | 损失函数:`focal_tversky` / `dice_focal`   |
+| `--deep_supervision`        | `0`             | 启用深层监督                                  |
+| `--load_pretrained`         | `False`         | 加载预训练权重                                |
+| `--freeze_mamba_encoder`    | `0`             | 冻结 Mamba 编码器                             |
+| `--early_stopping_patience` | `0`             | 早停 patience (0=禁用)                        |
 
 ---
 
 ## 📊 评估指标 (MICCAI 标准)
 
-| 指标 | 说明 |
-|------|------|
-| **Dice** | Sørensen-Dice 重叠系数 ↑ |
-| **HD95** | 95% Hausdorff 距离（边界误差）↓ |
-| **ASD** | 平均表面距离 ↓ |
-| **IoU** | 交并比 (Jaccard) ↑ |
-| **Recall** | 敏感性 TP/(TP+FN) ↑ |
-| **Precision** | 精确度 TP/(TP+FP) ↑ |
+| 指标                | 说明                             |
+| ------------------- | -------------------------------- |
+| **Dice**      | Sørensen-Dice 重叠系数 ↑       |
+| **HD95**      | 95% Hausdorff 距离（边界误差）↓ |
+| **ASD**       | 平均表面距离 ↓                  |
+| **IoU**       | 交并比 (Jaccard) ↑              |
+| **Recall**    | 敏感性 TP/(TP+FN) ↑             |
+| **Precision** | 精确度 TP/(TP+FP) ↑             |
 
 ---
 
@@ -183,16 +181,16 @@ python test.py \
 
 ## 📈 模型参数量
 
-| 模块 | 参数量 | 状态 |
-|------|--------|------|
-| CIM | ~18 | 可训练 |
-| ResNet34 Encoder | ~21.3M | 可训练 |
-| VMamba-Tiny Encoder | ~13.4M | 默认冻结 |
-| 通道投影层 | ~0.55M | 可训练 |
-| TMCA ×4 | ~1.1M | 可训练 |
-| SpatialAttentionFusion ×4 | ~1.6M | 可训练 |
-| SwinUMambaDecoder | ~4.0M | 可训练 |
-| **总计** | **~41.8M** | 可训练 ~28.4M |
+| 模块                       | 参数量           | 状态          |
+| -------------------------- | ---------------- | ------------- |
+| CIM                        | ~18              | 可训练        |
+| ResNet34 Encoder           | ~21.3M           | 可训练        |
+| VMamba-Tiny Encoder        | ~13.4M           | 默认冻结      |
+| 通道投影层                 | ~0.55M           | 可训练        |
+| TMCA ×4                   | ~1.1M            | 可训练        |
+| SpatialAttentionFusion ×4 | ~1.6M            | 可训练        |
+| SwinUMambaDecoder          | ~4.0M            | 可训练        |
+| **总计**             | **~41.8M** | 可训练 ~28.4M |
 
 ---
 
@@ -204,9 +202,3 @@ python test.py \
 - **VMamba / SS2D**: Liu et al., "VMamba: Visual State Space Model", 2024
 - **Swin-UMamba**: Liu et al., "Swin-UMamba: Mamba-based UNet with ImageNet-based pretraining", 2024
 - **Focal Tversky Loss**: Abraham & Khan, "A Novel Focal Tversky Loss for Unbalanced Biomedical Image Segmentation", ISBI 2019
-
----
-
-## 📄 License
-
-MIT License
